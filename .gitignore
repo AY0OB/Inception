@@ -1,0 +1,23 @@
+# Local environment configuration
+.env
+.env.*
+!.env.example
+
+# Confidential files
+secrets/
+*.key
+.ssh/
+id_rsa*
+id_ed25519*
+
+# Local persistent data
+data/
+
+# Virtual machines and installation media
+*.vdi
+*.vmdk
+*.vhd
+*.vhdx
+*.ova
+*.ovf
+*.iso
