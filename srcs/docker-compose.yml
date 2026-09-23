@@ -1,0 +1,33 @@
+services:
+  mariadb:
+    image: mariadb:inception
+    build:
+      context: ./requirements/mariadb
+    restart: unless-stopped
+
+    environment:
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+
+    secrets:
+      - db_root_password
+      - db_password
+
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+    networks:
+      - inception
+
+secrets:
+  db_root_password:
+    file: ../secrets/db_root_password.txt
+  db_password:
+    file: ../secrets/db_password.txt
+
+volumes:
+  mariadb_data:
+
+networks:
+  inception:
+    driver: bridge
