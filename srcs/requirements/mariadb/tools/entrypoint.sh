@@ -2,7 +2,6 @@
 set -euo pipefail
 
 DATA_DIR="/var/lib/mysql"
-SOCKET="/run/mysqld/mysqld.sock"
 MARKER="$DATA_DIR/.inception-initialized"
 
 mkdir -p /run/mysqld "$DATA_DIR"
@@ -41,57 +40,26 @@ if [ ! -f "$MARKER" ]; then
             --skip-test-db
     fi
 
-    # Temporary server: local socket only, no TCP connections.
-    gosu mysql mariadbd --skip-networking --socket="$SOCKET" &
-    TEMP_PID=$!
+    # Run initialization SQL in the foreground, then exit.
+    echo "Initializing MariaDB database and accounts..."
 
-    cleanup() {
-        kill -TERM "$TEMP_PID" 2>/dev/null || true
-        wait "$TEMP_PID" 2>/dev/null || true
-    }
-
-    trap cleanup EXIT
-    trap 'exit 143' TERM
-    trap 'exit 130' INT
-
-    ready=0
-    for attempt in {1..30}; do
-        if mariadb --protocol=socket --socket="$SOCKET" \
-            -u root -e "SELECT 1" >/dev/null 2>&1; then
-            ready=1
-            break
-        fi
-
-        if ! kill -0 "$TEMP_PID" 2>/dev/null; then
-            echo "MariaDB initialization server stopped unexpectedly." >&2
-            exit 1
-        fi
-
-        sleep 1
-    done
-
-    if [ "$ready" -ne 1 ]; then
-        echo "MariaDB did not become ready in time." >&2
-        exit 1
-    fi
-
-    mariadb --protocol=socket --socket="$SOCKET" -u root <<SQL
+    gosu mysql mariadbd \
+        --bootstrap \
+        --datadir="$DATA_DIR" \
+        --skip-networking <<SQL
+FLUSH PRIVILEGES;
 SET SESSION sql_mode = 'NO_BACKSLASH_ESCAPES';
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;
-CREATE USER IF NOT EXISTS '${DB_USER}'@'%'
-    IDENTIFIED BY '${DB_PASSWORD_SQL}';
-ALTER USER '${DB_USER}'@'%'
-    IDENTIFIED BY '${DB_PASSWORD_SQL}';
+CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASSWORD_SQL}';
+ALTER USER '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASSWORD_SQL}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';
 SET PASSWORD FOR 'root'@'localhost' = PASSWORD('${ROOT_PASSWORD_SQL}');
 SQL
 
-    kill -TERM "$TEMP_PID"
-    wait "$TEMP_PID"
-    trap - EXIT TERM INT
-
     touch "$MARKER"
     chown mysql:mysql "$MARKER"
+
+    unset DB_PASSWORD ROOT_PASSWORD DB_PASSWORD_SQL ROOT_PASSWORD_SQL password
 fi
 
 exec gosu mysql "$@"
