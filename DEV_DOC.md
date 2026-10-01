@@ -202,10 +202,10 @@ secrets. NGINX receives none of these password files.
 
 Run commands from `~/Inception`.
 
-Validate Compose:
+Validate Compose through the Makefile:
 
 ```bash
-sudo docker compose --env-file srcs/.env -f srcs/docker-compose.yml config -q
+make check-config
 ```
 
 Build and launch:
@@ -221,9 +221,20 @@ make
 | `make ps` | Show container status |
 | `make logs` | Follow recent service logs |
 | `make db-shell` | Open the application database client |
+| `make check-config` | Validate the Compose configuration without starting services |
+| `make test-https` | Check that HTTPS on port 443 returns HTTP status 200 |
+| `make test-http` | Check that connections to port 80 are refused |
+| `make test-tls` | Verify TLS 1.2 and 1.3 work and TLS 1.0 and 1.1 are rejected |
+| `make inspect-volumes` | Show named-volume mounts used by the running services |
 
 The Makefile calls Compose with `srcs/.env` and
 `srcs/docker-compose.yml`.
+
+`make test-https`, `make test-http`, `make test-tls` and
+`make inspect-volumes` are runtime checks and should be run after the
+services have been started.
+
+The network tests read `DOMAIN_NAME` from the running NGINX container.
 
 Internet access is required for Debian packages, WP-CLI and the initial
 WordPress download. WP-CLI and WordPress downloads are not version-pinned;
@@ -396,7 +407,19 @@ NGINX mounts the WordPress volume read-only.
 Both volumes are native Docker named volumes, without bind-mount driver
 options.
 
-Inspect storage:
+With the services running, inspect the volume mounts attached to each
+container:
+
+```bash
+make inspect-volumes
+```
+
+The command reports each named volume's source, destination and
+read/write state for MariaDB, WordPress and NGINX.
+
+NGINX should show the WordPress volume as read-only.
+
+Inspect the Docker volumes and their host mountpoints directly:
 
 ```bash
 sudo docker volume ls
@@ -419,45 +442,42 @@ Using `down -v` deletes the project's volumes and their data.
 
 ## Validation procedures
 
-These commands and checks describe how to validate the deployment.
+These checks describe how to validate the deployment.
+
+Start the services before running the runtime tests.
 
 ### HTTPS and HTTP
 
 Inside the VM:
 
 ```bash
-curl -kI --resolve amairia.42.fr:443:127.0.0.1 https://amairia.42.fr
-curl -I --max-time 5 --resolve amairia.42.fr:80:127.0.0.1 http://amairia.42.fr
+make test-https
+make test-http
 ```
 
-HTTPS should return `200 OK`. The HTTP connection should fail because
-the project does not publish or serve port 80.
+`make test-https` resolves the configured domain to `127.0.0.1`, connects
+to VM port 443 and succeeds only when the HTTPS response status is `200`.
+
+`make test-http` checks VM port 80 and succeeds only when the connection
+is refused.
+
+The project does not publish or serve port 80.
 
 ### TLS versions
 
-TLS 1.2 and TLS 1.3 should succeed:
+Run:
 
 ```bash
-curl -kI --tlsv1.2 --tls-max 1.2 \
-    --resolve amairia.42.fr:443:127.0.0.1 https://amairia.42.fr
-
-curl -kI --tlsv1.3 --tls-max 1.3 \
-    --resolve amairia.42.fr:443:127.0.0.1 https://amairia.42.fr
+make test-tls
 ```
 
-TLS 1.0 and TLS 1.1 should receive a protocol-version alert:
+The rule verifies that TLS 1.2 and TLS 1.3 each return HTTP status `200`.
 
-```bash
-openssl s_client -connect 127.0.0.1:443 \
-    -servername amairia.42.fr -tls1 \
-    -cipher 'DEFAULT:@SECLEVEL=0' -brief </dev/null
+It then checks with `openssl s_client` that TLS 1.0 and TLS 1.1 are
+rejected with a protocol-version alert.
 
-openssl s_client -connect 127.0.0.1:443 \
-    -servername amairia.42.fr -tls1_1 \
-    -cipher 'DEFAULT:@SECLEVEL=0' -brief </dev/null
-```
-
-The reduced security level applies only to these test clients.
+The reduced OpenSSL security level is used only by the legacy-protocol
+test clients.
 
 ### Database and accounts
 
@@ -489,6 +509,7 @@ users; the editor can manage content without access to user management.
 
 To test container replacement separately, use Compose's
 `up -d --force-recreate`, retaining the same project name and volumes.
+
 Allow services to become ready before checking the website.
 
 ### Configuration changes
@@ -499,8 +520,14 @@ For a PHP-FPM port-change exercise, update all matching references:
 - `fastcgi_pass` in NGINX's configuration template.
 - The WordPress Dockerfile's `EXPOSE` declaration for consistency.
 
-Run `make up`, then verify HTTPS access. Restore the required final
-configuration after the exercise.
+Run:
+
+```bash
+make up
+make test-https
+```
+
+Restore the required final configuration after the exercise.
 
 ## Credential management
 
@@ -533,8 +560,9 @@ For a complete VM checkpoint:
 6. Start the VM and verify Docker services and website access.
 
 On the campus Linux host, use port 8443 rather than privileged host
-port 443 for the optional HTTPS forwarding rule. Use the browser inside
-the VM for normal website access.
+port 443 for the optional HTTPS forwarding rule.
+
+Use the browser inside the VM for normal website access.
 
 An export contains the VM's secrets and data as they existed when it was
 created. Changes made after that export require a new backup.
@@ -543,11 +571,13 @@ To recover a checkpoint, import the saved appliance and repeat the
 service and access checks.
 
 Cloning the source repository alone does not restore a website backup.
+
 Without the original volumes, the application creates a fresh website.
 
 ## Git synchronization
 
 The development repository uses `origin` for GitHub.
+
 A campus checkout can additionally use `school` for the assigned
 42 repository.
 
@@ -563,4 +593,5 @@ If the school repository expects another submission branch, use the
 branch required by the assignment.
 
 A normal push preserves commit identifiers and dates.
+
 Do not force-push to resolve an unexpected divergence; inspect it first.
