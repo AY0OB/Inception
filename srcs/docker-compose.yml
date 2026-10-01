@@ -44,6 +44,22 @@ services:
     networks:
       - inception
 
+  nginx:
+    image: nginx:inception
+    build:
+      context: ./requirements/nginx
+    restart: unless-stopped
+    depends_on:
+      - wordpress
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME:?DOMAIN_NAME is required}
+    ports:
+      - "443:443"
+    volumes:
+      - wordpress_data:/var/www/html:ro
+    networks:
+      - inception
+
 secrets:
   db_root_password:
     file: ../secrets/db_root_password.txt
