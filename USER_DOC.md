@@ -2,86 +2,128 @@
 
 ## Services
 
-The project provides a WordPress website through three services:
+The website uses three services:
 
-- NGINX: receives HTTPS connections on port 443 and serves static files.
-- WordPress with PHP-FPM: runs the website's PHP code.
-- MariaDB: stores the website's database, including accounts and content.
+- NGINX receives HTTPS connections and serves static files.
+- WordPress with PHP-FPM runs the website.
+- MariaDB stores accounts, articles, pages, comments and other database data.
 
-Only NGINX publishes a port on the virtual machine.
+NGINX is the only service publishing an application port on the VM: 443.
 
-## Start and stop the project
+## Start and stop
 
-Start the virtual machine and connect from the host computer:
+Start the Inception VM in VirtualBox.
+
+Open a terminal inside the VM, or connect from the physical computer:
 
 ```bash
 ssh -p 2222 amairia@127.0.0.1
 ```
 
-From the project directory:
+Run the following commands inside the VM:
 
 ```bash
 cd ~/Inception
 make
 ```
 
-This builds the images and starts the services in the background.
-The first installation requires Internet access and may take a few minutes.
+The first installation requires Internet access and may take several
+minutes. Subsequent starts reuse existing data.
 
-To stop and remove the application containers and network:
+Check container status:
+
+```bash
+make ps
+```
+
+To stop and remove the containers and application network:
 
 ```bash
 make down
 ```
 
-The named volumes and their data are preserved.
-Run `make` to start the application again.
+This preserves the two persistent volumes. Run `make` to start again.
 
-To shut down the virtual machine:
+To shut down the VM cleanly:
 
 ```bash
 sudo poweroff
 ```
 
-Running containers use the `unless-stopped` restart policy and restart
-automatically after a VM reboot. Containers explicitly stopped or removed
-must be started again.
+Containers running before a normal VM reboot restart automatically.
+Containers explicitly stopped or removed must be started again.
 
-## Access the website
+## Access from inside the VM: campus setup
 
-VirtualBox uses NAT with these forwarding rules:
+The VM includes Xfce and Firefox ESR.
 
-| Purpose | Host IP | Host port | Guest port |
-| --- | --- | --- | --- |
-| SSH | 127.0.0.1 | 2222 | 22 |
-| HTTPS | 127.0.0.1 | 443 | 443 |
+In the VirtualBox console, log in as `amairia` and run:
 
-On the computer running the browser, add this entry to the hosts file:
+```bash
+startxfce4
+```
+
+Run this without sudo, from the VM console rather than SSH.
+If the graphical desktop is already open, simply launch Firefox.
+
+The VM's `/etc/hosts` must contain:
 
 ```text
 127.0.0.1 amairia.42.fr
 ```
 
-Hosts file locations:
+Open:
 
-- Windows: `C:\Windows\System32\drivers\etc\hosts`
-- Linux: `/etc/hosts`
+- Website: https://amairia.42.fr
+- Administration: https://amairia.42.fr/wp-admin/
 
-Editing this file requires administrator privileges.
-This host configuration is separate from the VM and must be checked
-again when moving to another computer.
+The browser connects directly to the VM's port 443.
+No hosts-file change on the campus computer is needed.
 
-Website: https://amairia.42.fr
+## Access from Windows: personal setup
 
-Administration: https://amairia.42.fr/wp-admin/
+To open the website in the physical Windows computer's browser:
 
-The project uses a self-signed certificate. A browser certificate warning
-is expected. Verify that you are opening your local project domain before
-continuing.
+1. Configure VirtualBox NAT forwarding from host `127.0.0.1:443`
+   to guest port `443`.
+2. Open the Windows hosts file with administrator privileges:
+
+```text
+C:\Windows\System32\drivers\etc\hosts
+```
+
+3. Add:
+
+```text
+127.0.0.1 amairia.42.fr
+```
+
+4. Open https://amairia.42.fr.
+
+This is a separate access method from the campus VM browser.
+
+## NAT forwarding
+
+| Setup | Purpose | Host IP | Host port | Guest port |
+| --- | --- | --- | --- | --- |
+| Both | SSH | 127.0.0.1 | 2222 | 22 |
+| Personal Windows computer | Browser HTTPS | 127.0.0.1 | 443 | 443 |
+| Campus computer | Optional command-line HTTPS test | 127.0.0.1 | 8443 | 443 |
+
+The campus browser runs inside the VM and does not use the 8443 rule.
+Opening an external URL on port 8443 is not a complete browsing solution:
+WordPress generates links using its configured URL without that port.
+
+## Certificate warning
+
+NGINX uses a self-signed certificate. A browser trust warning is expected.
+
+Verify that you are visiting your local `amairia.42.fr` website, then use
+the browser's advanced options to continue.
 
 ## Accounts and credentials
 
-The initial WordPress accounts are:
+Initial WordPress accounts:
 
 | Username | Role | Password file |
 | --- | --- | --- |
@@ -91,82 +133,95 @@ The initial WordPress accounts are:
 The administrator manages the website and users.
 The editor manages content without administrator access.
 
-Database credentials are separate:
+Database password files:
 
-- `secrets/db_password.txt`: password for the application's database user.
-- `secrets/db_root_password.txt`: password for the MariaDB root account.
+| File | Purpose |
+| --- | --- |
+| `secrets/db_password.txt` | Application database user |
+| `secrets/db_root_password.txt` | MariaDB root account |
 
-All paths above are relative to the project directory.
-Secrets remain local and are excluded from Git.
+Paths are relative to `~/Inception` inside the VM.
+These files remain local and are excluded from Git.
 
 Non-secret settings are in `srcs/.env`.
-The tracked `srcs/.env.example` documents the expected settings.
+Their template is `srcs/.env.example`.
 
-Changing a secret file alone does not update an existing account password.
-Credential changes must be coordinated with the database, WordPress and
-its configuration.
+To manage WordPress account passwords, use the administrator's Users
+section or the account's Profile section. Keep the corresponding local
+secret file consistent if it must be reused for a fresh installation.
+
+Changing a secret file alone does not modify an existing account.
+Changing the application database password also requires updating
+MariaDB and WordPress's database configuration together.
+
+Do not put passwords in commits, screenshots or shared command output.
 
 ## Check service health
 
-List the containers:
+From the repository root inside the VM:
 
 ```bash
 make ps
-```
-
-All three services should be `Up`. Only NGINX should publish port 443.
-
-Follow the logs:
-
-```bash
 make logs
 ```
 
-Press Ctrl+C to leave the log display without stopping the containers.
+All three containers should be `Up`.
+Only NGINX should show a published port mapping.
 
-Test the website from inside the VM:
+Press Ctrl+C to stop following logs without stopping the containers.
+
+Test HTTPS from the VM:
 
 ```bash
 curl -kI --resolve amairia.42.fr:443:127.0.0.1 https://amairia.42.fr
 ```
 
-The expected response is `HTTP/1.1 200 OK`.
+Expected response: `HTTP/1.1 200 OK`.
+
 The `-k` option bypasses certificate verification for this local test.
 
-To open the database client while MariaDB is running:
+Open the application database client:
 
 ```bash
 make db-shell
 ```
 
 Enter the application database password when prompted.
-Type `EXIT;` to leave the client.
+
+```sql
+SHOW TABLES;
+EXIT;
+```
 
 ## Persistent data
 
-Two Docker named volumes store application data:
+Two Docker named volumes preserve the application:
 
 - `srcs_mariadb_data`: database files.
 - `srcs_wordpress_data`: WordPress files, configuration and uploads.
 
-Their data is stored under:
+Their data is beneath:
 
 ```text
 /home/amairia/data/docker/volumes/
 ```
 
-Data survives container replacement and VM reboots.
-Do not delete these volumes or use `docker compose down -v` on the
-application unless you intend to erase its persistent data.
+Container replacement and VM reboots preserve these volumes.
+Deleting the volumes erases the associated application data.
+
+Do not run `docker compose down -v` on the application unless you
+intend to erase its persistent storage.
 
 ## Troubleshooting
 
-- SSH connection refused: check that the VM is running and the SSH
-  forwarding rule is configured.
-- Website unreachable: check the hosts entry, HTTPS forwarding rule
-  and `make ps`.
-- HTTP 502: inspect the WordPress and NGINX logs; PHP-FPM may still be
-  starting or may have failed.
-- Database connection error: inspect MariaDB logs and check that the
-  stored database credentials match the application configuration.
-- Restarting container: inspect `make logs` to identify the startup error.
+- SSH connection refused: check that the VM is running, SSH is active
+  and the `2222 -> 22` forwarding rule exists.
+- Desktop does not start: run `startxfce4` from the VirtualBox console,
+  as `amairia`, without sudo.
+- Domain not found in the VM browser: check the VM's `/etc/hosts`.
+- Website unreachable: check `make ps` and `make logs`.
+- HTTP 502: inspect NGINX and WordPress logs; PHP-FPM may not be ready.
+- Database connection error: inspect MariaDB logs and check that its
+  credentials match WordPress's configuration.
+- Container keeps restarting: inspect its startup errors in the logs.
+- Certificate warning: expected for the project's self-signed certificate.
