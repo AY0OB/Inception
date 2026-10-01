@@ -219,6 +219,7 @@ make
 | `make` or `make up` | Build images and start services |
 | `make down` | Remove containers and network, retain volumes |
 | `make ps` | Show container status |
+| `make reset` | Remove containers, network and persistent volumes, then rebuild the project from scratch |
 | `make logs` | Follow recent service logs |
 | `make db-shell` | Open the application database client |
 | `make check-config` | Validate the Compose configuration without starting services |

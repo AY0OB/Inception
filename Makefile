@@ -3,7 +3,7 @@ COMPOSE = sudo docker compose --env-file srcs/.env -f srcs/docker-compose.yml
 .DEFAULT_GOAL := all
 
 .PHONY: all up down logs ps db-shell check-config \
-	test-https test-http test-tls inspect-volumes
+	test-https test-http test-tls inspect-volumes reset
 
 all: up
 
@@ -18,6 +18,11 @@ logs:
 
 ps:
 	$(COMPOSE) ps -a
+
+reset:
+	@echo "WARNING: deleting containers, network and persistent volumes"
+	$(COMPOSE) down -v --remove-orphans
+	$(COMPOSE) up -d --build
 
 db-shell:
 	$(COMPOSE) exec mariadb sh -c 'exec mariadb --protocol=TCP -h 127.0.0.1 -u "$$DB_USER" -p "$$DB_NAME"'
